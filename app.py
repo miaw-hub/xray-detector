@@ -17,17 +17,16 @@ with col1:
 with col2:
     st.metric(label="Target Input Resolution", value="128x128 px")
 
-# 2. Download and Cache Model from Hugging Face
+# 2. Download and Cache Model Weights from Hugging Face
 @st.cache_resource
 def load_trained_xray_model():
     model_path = 'best_model_final.keras'
     
-    # Force a fresh download if the file is missing or corrupted/empty
-    if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000000:  # Must be larger than 1MB
+    # Download the model if it doesn't exist on the server
+    if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000000:
         hf_url = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final.keras"
         
         with st.spinner("Downloading model weights from Hugging Face Cloud storage... (This takes a moment on first load)"):
-            # Using requests to cleanly stream the file down to the server
             response = requests.get(hf_url, stream=True)
             if response.status_code == 200:
                 with open(model_path, 'wb') as f:
@@ -37,8 +36,13 @@ def load_trained_xray_model():
                 st.error(f"Failed to download model from Hugging Face. Status Code: {response.status_code}")
                 st.stop()
                 
-    # Load model with safety configuration arguments
-    return tf.keras.models.load_model(model_path, compile=False, safe_mode=False)
+    try:
+        # Standard load attempt
+        return tf.keras.models.load_model(model_path, compile=False, safe_mode=False)
+    except Exception:
+        # BULLETPROOF FALLBACK: Treat the model file directly as a deployment layer 
+        # to bypass all Keras internal version object deserialization errors.
+        return tf.keras.layers.TFSMLayer(model_path, call_endpoint="serving_default")
 
 with st.spinner("Warming up Keras inference layer..."):
     model = load_trained_xray_model()
@@ -63,9 +67,19 @@ if uploaded_file is not None:
         input_tensor = np.expand_dims(img_scaled, axis=0)
         
         # 5. Core Model Processing block
-        raw_predictions = model.predict(input_tensor)
-        target_labels = ['COVID-19', 'Normal', 'Pneumonia']
+        predictions_output = model(input_tensor)
         
+        # Extract predictions correctly whether loaded as a full model or an inference layer
+        if isinstance(predictions_output, dict):
+            # TFSMLayer outputs predictions wrapped inside a dictionary matching its output node name
+            key = list(predictions_output.keys())[0]
+            raw_predictions = predictions_output[key].numpy()
+        else:
+            raw_predictions = predictions_output if hasattr(predictions_output, 'numpy') else np.array(predictions_output)
+            if hasattr(raw_predictions, 'numpy'):
+                raw_predictions = raw_predictions.numpy()
+                
+        target_labels = ['COVID-19', 'Normal', 'Pneumonia']
         winning_index = np.argmax(raw_predictions[0])
         final_prediction = target_labels[winning_index]
         confidence_metric = raw_predictions[0][winning_index] * 100
