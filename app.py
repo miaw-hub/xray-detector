@@ -1,5 +1,5 @@
 import streamlit as st
-import keras                    # ✅ import keras directly
+import keras
 from PIL import Image
 import numpy as np
 import requests
@@ -7,7 +7,7 @@ import os
 
 st.set_page_config(page_title="X-Ray Classification Hub", layout="centered")
 st.title("🩻 Chest X-Ray Diagnostic Classifier")
-st.write("Upload a chest X-ray to identify Normal, COVID-19, or Pneumonia.")
+st.write("Upload a patient's chest X-ray image to identify Normal, COVID-19, or Pneumonia.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -17,21 +17,20 @@ with col2:
 
 @st.cache_resource
 def load_trained_xray_model():
-    model_path = '/tmp/best_model_final.keras'
+    model_path = '/tmp/best_model_final_fixed.keras'
 
     if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000000:
-        hf_url = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final.keras?download=true"
-        with st.spinner("Downloading model weights from Hugging Face..."):
-            response = requests.get(hf_url, stream=True, timeout=120)
+        hf_url = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final_fixed%20(1).keras"
+        with st.spinner("Downloading model from Hugging Face..."):
+            response = requests.get(hf_url, stream=True, timeout=120, headers={"User-Agent": "Mozilla/5.0"})
             if response.status_code == 200:
                 with open(model_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
             else:
-                st.error(f"❌ Download failed. Status: {response.status_code}. Make sure your HuggingFace dataset is PUBLIC.")
+                st.error(f"❌ Download failed. Status: {response.status_code}")
                 st.stop()
 
-    # ✅ Use keras.saving.load_model for Keras 3
     return keras.saving.load_model(model_path, compile=False)
 
 with st.spinner("Warming up model..."):
@@ -41,7 +40,7 @@ uploaded_file = st.file_uploader("Upload Chest X-Ray (JPG, JPEG, PNG)", type=["j
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Input Image", use_container_width=True)
+    st.image(image, caption="Uploaded X-Ray", use_container_width=True)
 
     with st.spinner("Running inference..."):
         if image.mode != "RGB":
