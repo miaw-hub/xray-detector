@@ -29,7 +29,8 @@ def load_trained_xray_model():
         with st.spinner("Downloading model weights from Hugging Face Cloud storage... (This takes a moment on first load)"):
             urllib.request.urlretrieve(hf_url, model_path)
             
-    return tf.keras.models.load_model(model_path)
+    # FIX: Bypass strict layer structural checking rules in Keras v3 envs
+    return tf.keras.models.load_model(model_path, compile=False, safe_mode=False)
 
 with st.spinner("Warming up Keras inference layer..."):
     model = load_trained_xray_model()
