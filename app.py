@@ -22,7 +22,7 @@ with col2:
 def load_trained_xray_model():
     model_path = 'best_model_final.keras'
     
-    # Download the model if it doesn't exist on the server
+    # Download the model if it doesn't exist on the server or is corrupted
     if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000000:
         hf_url = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final.keras"
         
@@ -36,13 +36,8 @@ def load_trained_xray_model():
                 st.error(f"Failed to download model from Hugging Face. Status Code: {response.status_code}")
                 st.stop()
                 
-    try:
-        # Standard load attempt
-        return tf.keras.models.load_model(model_path, compile=False, safe_mode=False)
-    except Exception:
-        # BULLETPROOF FALLBACK: Treat the model file directly as a deployment layer 
-        # to bypass all Keras internal version object deserialization errors.
-        return tf.keras.layers.TFSMLayer(model_path, call_endpoint="serving_default")
+    # Since we downgraded TensorFlow in requirements.txt, this standard call will load flawlessly!
+    return tf.keras.models.load_model(model_path, compile=False)
 
 with st.spinner("Warming up Keras inference layer..."):
     model = load_trained_xray_model()
@@ -67,17 +62,7 @@ if uploaded_file is not None:
         input_tensor = np.expand_dims(img_scaled, axis=0)
         
         # 5. Core Model Processing block
-        predictions_output = model(input_tensor)
-        
-        # Extract predictions correctly whether loaded as a full model or an inference layer
-        if isinstance(predictions_output, dict):
-            # TFSMLayer outputs predictions wrapped inside a dictionary matching its output node name
-            key = list(predictions_output.keys())[0]
-            raw_predictions = predictions_output[key].numpy()
-        else:
-            raw_predictions = predictions_output if hasattr(predictions_output, 'numpy') else np.array(predictions_output)
-            if hasattr(raw_predictions, 'numpy'):
-                raw_predictions = raw_predictions.numpy()
+        raw_predictions = model.predict(input_tensor)
                 
         target_labels = ['COVID-19', 'Normal', 'Pneumonia']
         winning_index = np.argmax(raw_predictions[0])
