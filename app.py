@@ -19,7 +19,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# CSS
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -40,11 +39,14 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     border: 1px solid rgba(100,181,246,0.15); border-radius: 16px;
     padding: 24px; margin-bottom: 18px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
 }
-.card h3 { color: #64b5f6; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; margin: 0 0 14px 0; }
+.card h3 {
+    color: #64b5f6; font-size: 0.8rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1.5px; margin: 0 0 14px 0;
+}
 
-.result-covid     { background: linear-gradient(135deg,#b71c1c,#e53935); border-radius:12px; padding:18px 24px; text-align:center; color:white; font-size:1.6rem; font-weight:700; letter-spacing:2px; box-shadow:0 8px 24px rgba(229,57,53,0.4); }
-.result-normal    { background: linear-gradient(135deg,#1b5e20,#43a047); border-radius:12px; padding:18px 24px; text-align:center; color:white; font-size:1.6rem; font-weight:700; letter-spacing:2px; box-shadow:0 8px 24px rgba(67,160,71,0.4); }
-.result-pneumonia { background: linear-gradient(135deg,#e65100,#fb8c00); border-radius:12px; padding:18px 24px; text-align:center; color:white; font-size:1.6rem; font-weight:700; letter-spacing:2px; box-shadow:0 8px 24px rgba(251,140,0,0.4); }
+.result-covid     { background: linear-gradient(135deg,#b71c1c,#e53935); border-radius:12px; padding:18px 24px; text-align:center; color:white; font-size:1.6rem; font-weight:700; letter-spacing:2px; box-shadow:0 8px 24px rgba(229,57,53,0.4); margin-bottom:16px; }
+.result-normal    { background: linear-gradient(135deg,#1b5e20,#43a047); border-radius:12px; padding:18px 24px; text-align:center; color:white; font-size:1.6rem; font-weight:700; letter-spacing:2px; box-shadow:0 8px 24px rgba(67,160,71,0.4);  margin-bottom:16px; }
+.result-pneumonia { background: linear-gradient(135deg,#e65100,#fb8c00); border-radius:12px; padding:18px 24px; text-align:center; color:white; font-size:1.6rem; font-weight:700; letter-spacing:2px; box-shadow:0 8px 24px rgba(251,140,0,0.4);  margin-bottom:16px; }
 
 .prob-row    { display:flex; align-items:center; margin-bottom:12px; gap:12px; }
 .prob-label  { width:100px; font-size:0.8rem; font-weight:600; color:#90caf9; text-transform:uppercase; letter-spacing:0.5px; }
@@ -66,6 +68,15 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     border-left: 4px solid #64b5f6; border-radius: 0 12px 12px 0;
     padding: 20px 24px; color: #cfd8dc; font-size: 0.95rem;
     line-height: 1.8; margin-top: 10px;
+}
+
+.section-divider {
+    border: none; border-top: 1px solid rgba(100,181,246,0.12); margin: 20px 0;
+}
+
+.lang-selector-label {
+    color: #64b5f6; font-size: 0.75rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px;
 }
 
 .model-row {
@@ -109,8 +120,19 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 </style>
 """, unsafe_allow_html=True)
 
+# GROQ CLIENT
+groq_api_key = (
+    st.secrets.get("GROQ_API_KEY") or
+    st.secrets.get("groq_api_key") or
+    st.secrets.get("GROQ_KEY") or
+    st.secrets.get("groq_key")
+)
+if not groq_api_key:
+    st.error("Groq API key not found. Please add GROQ_API_KEY to your Streamlit secrets.")
+    st.stop()
+groq_client = Groq(api_key=groq_api_key)
+
 # CONSTANTS
-groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 CLASSES   = ['covid', 'normal', 'pneumonia']
 MODEL_URL = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final_fixed%20(1).keras"
 IMG_SIZE  = 128
@@ -127,6 +149,7 @@ if 'history'      not in st.session_state: st.session_state.history = []
 if 'total'        not in st.session_state: st.session_state.total = 0
 if 'class_counts' not in st.session_state: st.session_state.class_counts = {'covid': 0, 'normal': 0, 'pneumonia': 0}
 if 'result'       not in st.session_state: st.session_state.result = None
+
 
 # HELPERS
 @st.cache_resource(show_spinner=False)
@@ -180,9 +203,8 @@ def explain_result(label, confidence, language, patient_name, patient_age):
             "content": (
                 f"{patient_info}\n\n"
                 f"Chest X-ray AI classification result:\n"
-                f"Class: {label}\n"
-                f"Confidence: {confidence}\n\n"
-                f"Explain in {language}:\n\n"
+                f"Class: {label}\nConfidence: {confidence}\n\n"
+                f"Explain in {language}:\n"
                 "1. What this classification means\n"
                 "2. General information about this condition\n"
                 "3. Questions the patient may discuss with a healthcare professional\n"
@@ -212,12 +234,12 @@ def explain_prediction_reason(label):
 def risk_level(label, confidence):
     conf = float(confidence.replace("%", ""))
     if label == "normal":
-        return "Low Risk"
+        return "✅ Low Risk"
     if conf >= 90:
-        return "High Risk"
+        return "🔴 High Risk — Please consult a doctor immediately"
     if conf >= 70:
-        return "Moderate Risk"
-    return "Review Recommended"
+        return "🟠 Moderate Risk — Clinical review recommended"
+    return "🟡 Review Recommended"
 
 def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, explanation, findings):
     try:
@@ -234,16 +256,12 @@ def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, 
 
         def section_header(text):
             return Paragraph(text, ParagraphStyle(
-                'SectionHeader',
-                parent=styles['Normal'],
-                fontSize=13,
-                textColor=colors.HexColor('#1565c0'),
-                spaceAfter=6,
-                fontName='Helvetica-Bold'
+                'SectionHeader', parent=styles['Normal'], fontSize=13,
+                textColor=colors.HexColor('#1565c0'), spaceAfter=6, fontName='Helvetica-Bold'
             ))
 
         story.append(Paragraph("Chest X-Ray Diagnostic Classifier Report", ParagraphStyle(
-            'Title', parent=styles['Title'], fontSize=20,
+            'ReportTitle', parent=styles['Title'], fontSize=20,
             textColor=colors.HexColor('#1565c0'), spaceAfter=4
         )))
         story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#1565c0')))
@@ -293,9 +311,9 @@ def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, 
         story.append(section_header("Class Probabilities"))
         prob_t = Table([
             ['Class', 'Probability'],
-            ['COVID-19', f'{preds[0] * 100:.2f}%'],
-            ['Normal',   f'{preds[1] * 100:.2f}%'],
-            ['Pneumonia', f'{preds[2] * 100:.2f}%']
+            ['COVID-19',   f'{preds[0] * 100:.2f}%'],
+            ['Normal',     f'{preds[1] * 100:.2f}%'],
+            ['Pneumonia',  f'{preds[2] * 100:.2f}%']
         ], colWidths=[3 * inch, 3 * inch])
         prob_t.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
@@ -334,7 +352,6 @@ def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, 
             ParagraphStyle('Disclaimer', parent=styles['Normal'], fontSize=8,
                            textColor=colors.grey, alignment=1)
         ))
-
         doc.build(story)
         buf.seek(0)
         return buf
@@ -343,19 +360,15 @@ def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, 
         return None
 
 
-# SIDEBAR
+# ── SIDEBAR ── patient info + session stats only
 with st.sidebar:
-    st.markdown("### Settings")
+    st.markdown("### ⚙️ Patient Info")
     st.markdown("---")
-    st.markdown("#### Patient Information")
     patient_name   = st.text_input("Patient Name", placeholder="e.g. Sarah Ahmed")
     patient_age    = st.text_input("Age", placeholder="e.g. 35")
     patient_gender = st.selectbox("Gender", ["Select", "Female", "Male", "Other"])
     st.markdown("---")
-    st.markdown("#### Explanation Language")
-    language = st.selectbox("", ["English", "Urdu", "Arabic", "French", "Spanish"], label_visibility="collapsed")
-    st.markdown("---")
-    st.markdown("#### Session Statistics")
+    st.markdown("### 📊 Session Stats")
     s1, s2 = st.columns(2)
     with s1:
         st.markdown(f'<div class="stat-box"><div class="stat-val">{st.session_state.total}</div><div class="stat-lbl">Analyzed</div></div>', unsafe_allow_html=True)
@@ -369,30 +382,30 @@ with st.sidebar:
         st.markdown(f'<div class="stat-box"><div class="stat-val">{st.session_state.class_counts["pneumonia"]}</div><div class="stat-lbl">Pneumonia</div></div>', unsafe_allow_html=True)
     if st.session_state.history:
         st.markdown("---")
-        st.markdown("#### Recent History")
+        st.markdown("### 🕐 Recent History")
         for h in reversed(st.session_state.history[-5:]):
             st.markdown(f"`{h['time']}` **{h['label'].upper()}** — {h['conf']}")
 
 
-# HERO
+# ── HERO ──
 st.markdown("""
 <div class="hero">
-    <h1>Chest X-Ray Diagnostic Classifier</h1>
-    <p>Deep learning powered classification - COVID-19 - Pneumonia - Normal</p>
+    <h1>🫁 Chest X-Ray Diagnostic Classifier</h1>
+    <p>Deep learning powered classification · COVID-19 · Pneumonia · Normal</p>
 </div>
 """, unsafe_allow_html=True)
 
-# TABS
-tab1, tab2 = st.tabs(["Diagnosis", "Model Comparison"])
+# ── TABS ──
+tab1, tab2 = st.tabs(["🩺 Diagnosis", "📈 Model Comparison"])
 
-# TAB 1
 with tab1:
     left, right = st.columns([1, 1], gap="large")
 
+    # ── LEFT: upload + controls ──
     with left:
-        st.markdown('<div class="card"><h3>Upload X-Ray Image</h3>', unsafe_allow_html=True)
+        st.markdown('<div class="card"><h3>📤 Upload X-Ray Image</h3>', unsafe_allow_html=True)
         uploaded = st.file_uploader("", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
-        st.markdown('<p class="upload-hint">Supported: JPG - JPEG - PNG</p>', unsafe_allow_html=True)
+        st.markdown('<p class="upload-hint">Supported formats: JPG · JPEG · PNG</p>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         if uploaded:
@@ -402,9 +415,18 @@ with tab1:
             with c1:
                 st.image(image,    caption="Original",  use_container_width=True)
             with c2:
-                st.image(enhanced, caption="Enhanced", use_container_width=True)
+                st.image(enhanced, caption="Enhanced",  use_container_width=True)
 
-            if st.button("Analyze X-Ray", key="analyze_btn"):
+            # Language selector lives right above the Analyze button
+            st.markdown('<div class="card"><h3>🌐 Explanation Language</h3>', unsafe_allow_html=True)
+            language = st.selectbox(
+                "Choose the language for the AI medical explanation:",
+                ["English", "Urdu", "Arabic", "French", "Spanish"],
+                key="language_select"
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            if st.button("🔍 Analyze X-Ray", key="analyze_btn"):
                 with st.spinner("Loading AI model..."):
                     model = load_model()
                 with st.spinner("Analyzing X-ray..."):
@@ -422,35 +444,62 @@ with tab1:
                             'conf':  conf,
                             'time':  datetime.datetime.now().strftime('%H:%M')
                         })
+
+                        # Generate explanations immediately so they're cached in state
+                        with st.spinner("Generating AI explanations..."):
+                            explanation = explain_result(label, conf, language, patient_name, patient_age)
+                            reasoning   = explain_prediction_reason(label)
+
                         st.session_state.result = {
-                            'label':    label,
-                            'conf':     conf,
-                            'preds':    preds,
-                            'findings': get_key_findings(label, preds)
+                            'label':       label,
+                            'conf':        conf,
+                            'preds':       preds,
+                            'findings':    get_key_findings(label, preds),
+                            'explanation': explanation,
+                            'reasoning':   reasoning,
+                            'language':    language,
                         }
                     except Exception as e:
                         st.error(f"Analysis error: {e}")
                         st.session_state.result = None
 
+    # ── RIGHT: all results in order ──
     with right:
         if not uploaded:
-            st.markdown('<div class="placeholder-box"><div style="font-size:4rem;margin-bottom:16px;">🫁</div><div style="color:#546e7a;font-size:0.95rem;line-height:1.8;">Upload a chest X-ray on the left<br>then click <strong style="color:#64b5f6">Analyze X-Ray</strong><br>to get AI-powered diagnosis</div></div>', unsafe_allow_html=True)
+            st.markdown("""
+            <div class="placeholder-box">
+                <div style="font-size:4rem;margin-bottom:16px;">🫁</div>
+                <div style="color:#546e7a;font-size:0.95rem;line-height:1.8;">
+                    Upload a chest X-ray on the left<br>
+                    select your language<br>
+                    then click <strong style="color:#64b5f6">Analyze X-Ray</strong>
+                </div>
+            </div>""", unsafe_allow_html=True)
 
         elif st.session_state.result is not None:
-            res     = st.session_state.result
-            label   = res['label']
-            conf    = res['conf']
-            preds   = res['preds']
+            res      = st.session_state.result
+            label    = res['label']
+            conf     = res['conf']
+            preds    = res['preds']
             findings = res['findings']
+            explanation = res['explanation']
+            reasoning   = res['reasoning']
+            language    = res['language']
 
-            st.markdown(f'<div class="result-{label}">{label.upper()} — {conf}</div>', unsafe_allow_html=True)
+            # 1. Result banner
+            st.markdown(f'<div class="result-{label}">{label.upper()} · {conf}</div>', unsafe_allow_html=True)
+
+            # 2. Risk level
             st.info(risk_level(label, conf))
-            st.markdown("### Model Confidence")
+
+            # 3. Confidence meter
+            st.markdown('<div class="card"><h3>📊 Model Confidence</h3>', unsafe_allow_html=True)
             st.progress(float(preds[int(np.argmax(preds))]))
             st.metric("Confidence Score", conf)
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="card"><h3>Class Probabilities</h3>', unsafe_allow_html=True)
+            # 4. Class probability bars
+            st.markdown('<div class="card"><h3>📉 Class Probabilities</h3>', unsafe_allow_html=True)
             for i, cls in enumerate(CLASSES):
                 pct = preds[i] * 100
                 st.markdown(
@@ -463,45 +512,39 @@ with tab1:
                 )
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # 5. Pie chart
             df = pd.DataFrame({"Class": CLASSES, "Probability": preds * 100})
             fig = px.pie(
-                df,
-                values="Probability",
-                names="Class",
-                hole=0.55,
+                df, values="Probability", names="Class", hole=0.55,
                 color="Class",
-                color_discrete_map={
-                    "covid":     "#e53935",
-                    "normal":    "#43a047",
-                    "pneumonia": "#fb8c00"
-                }
+                color_discrete_map={"covid": "#e53935", "normal": "#43a047", "pneumonia": "#fb8c00"}
+            )
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font_color="#e8eaf6",
+                margin=dict(t=20, b=20, l=0, r=0)
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            st.markdown('<div class="card"><h3>Key Radiological Findings</h3>', unsafe_allow_html=True)
+            # 6. Key findings
+            st.markdown('<div class="card"><h3>🔬 Key Radiological Findings</h3>', unsafe_allow_html=True)
             for f in findings:
                 st.markdown(f'<div class="key-finding">{f}</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-            with st.spinner("Generating explanation..."):
-                try:
-                    explanation = explain_result(label, conf, language, patient_name, patient_age)
-                    reasoning   = explain_prediction_reason(label)
+            # 7. Why did AI predict this?
+            st.markdown('<div class="card"><h3>🤖 Why Did The AI Predict This?</h3>', unsafe_allow_html=True)
+            st.markdown(f'<div class="explanation-box">{reasoning.replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-                    st.markdown('<div class="card"><h3>Why Did The AI Predict This?</h3></div>', unsafe_allow_html=True)
-                    st.write(reasoning)
+            # 8. Medical explanation in chosen language
+            st.markdown(f'<div class="card"><h3>💬 AI Medical Explanation ({language})</h3>', unsafe_allow_html=True)
+            st.markdown(f'<div class="explanation-box">{explanation.replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-                    newline = "<br>"
-                    st.markdown(
-                        f'<div class="card"><h3>AI Medical Explanation ({language})</h3>'
-                        f'<div class="explanation-box">{explanation.replace(chr(10), newline)}</div></div>',
-                        unsafe_allow_html=True
-                    )
-                except Exception as e:
-                    st.error(f"Explanation error: {e}")
-                    explanation = "Explanation unavailable."
-
-            st.markdown("<br>", unsafe_allow_html=True)
+            # 9. PDF download
+            st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
             with st.spinner("Preparing PDF..."):
                 try:
                     import reportlab  # noqa
@@ -516,19 +559,29 @@ with tab1:
                             f"{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
                         )
                         st.download_button(
-                            "Download Full PDF Report",
+                            "📄 Download Full PDF Report",
                             data=pdf,
                             file_name=fname,
                             mime="application/pdf",
                             use_container_width=True
                         )
                 except ImportError:
-                    st.warning("Add reportlab to requirements.txt to enable PDF download.")
+                    st.warning("Add `reportlab` to requirements.txt to enable PDF download.")
+
+        elif uploaded and st.session_state.result is None:
+            st.markdown("""
+            <div class="placeholder-box">
+                <div style="font-size:3rem;margin-bottom:12px;">👈</div>
+                <div style="color:#546e7a;font-size:0.95rem;">
+                    Select a language and click<br>
+                    <strong style="color:#64b5f6">Analyze X-Ray</strong> to see results here
+                </div>
+            </div>""", unsafe_allow_html=True)
 
 
-# TAB 2
+# ── TAB 2: Model Comparison ──
 with tab2:
-    st.markdown('<div class="card"><h3>Model Performance Comparison</h3>All four models trained on the same dataset - 6939 balanced chest X-ray images.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card"><h3>Model Performance Comparison</h3>All four models trained on the same dataset — 6939 balanced chest X-ray images.</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="card"><h3>Overall Accuracy</h3>', unsafe_allow_html=True)
     for name, stats in MODEL_STATS.items():
@@ -554,23 +607,23 @@ with tab2:
                 <div style="font-weight:700;color:#e8eaf6;margin-bottom:12px;font-size:0.85rem;">{name}{"  ★" if name == "ResNet50" else ""}</div>
                 <div style="margin-bottom:8px;"><div style="font-size:0.7rem;color:#90caf9;">COVID</div><div style="font-size:1.2rem;font-weight:700;color:#e53935;">{stats["covid"]}%</div></div>
                 <div style="margin-bottom:8px;"><div style="font-size:0.7rem;color:#90caf9;">NORMAL</div><div style="font-size:1.2rem;font-weight:700;color:#43a047;">{stats["normal"]}%</div></div>
-                <div><div style="font-size:0.7rem;color:#90cef9;">PNEUMONIA</div><div style="font-size:1.2rem;font-weight:700;color:#fb8c00;">{stats["pneumonia"]}%</div></div>
+                <div><div style="font-size:0.7rem;color:#90caf9;">PNEUMONIA</div><div style="font-size:1.2rem;font-weight:700;color:#fb8c00;">{stats["pneumonia"]}%</div></div>
             </div>''', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("""
     <div class="card">
         <h3>Why ResNet50 Was Selected</h3>
-        <div class="key-finding"><strong>Highest Overall Accuracy</strong> - 83.95% across all three classes</div>
-        <div class="key-finding"><strong>Best COVID Detection</strong> - 94.51% sensitivity, critical for medical screening</div>
-        <div class="key-finding"><strong>Best Normal Detection</strong> - 97.84%, minimizing false positives</div>
-        <div class="key-finding"><strong>Deep Residual Learning</strong> - Skip connections allow learning of subtle radiological patterns</div>
-        <div class="key-finding"><strong>Stable Training</strong> - BatchNorm frozen layers prevented instability during fine-tuning</div>
+        <div class="key-finding"><strong>Highest Overall Accuracy</strong> — 83.95% across all three classes</div>
+        <div class="key-finding"><strong>Best COVID Detection</strong> — 94.51% sensitivity, critical for medical screening</div>
+        <div class="key-finding"><strong>Best Normal Detection</strong> — 97.84%, minimizing false positives</div>
+        <div class="key-finding"><strong>Deep Residual Learning</strong> — Skip connections allow learning of subtle radiological patterns</div>
+        <div class="key-finding"><strong>Stable Training</strong> — BatchNorm frozen layers prevented instability during fine-tuning</div>
     </div>""", unsafe_allow_html=True)
 
-# DISCLAIMER
+# ── DISCLAIMER ──
 st.markdown("""
 <div class="disclaimer">
-    <strong>Medical Disclaimer:</strong> This tool is for research and educational purposes only.
+    ⚠️ <strong>Medical Disclaimer:</strong> This tool is for research and educational purposes only.
     It is not a substitute for professional medical diagnosis. Always consult a qualified healthcare provider.
 </div>""", unsafe_allow_html=True)
