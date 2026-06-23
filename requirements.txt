@@ -1,2 +1,7 @@
 streamlit
 pillow
+numpy
+matplotlib
+requests
+tensorflow
+openai
