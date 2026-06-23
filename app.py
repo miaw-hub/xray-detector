@@ -8,6 +8,8 @@ import requests
 from groq import Groq
 from io import BytesIO
 import datetime
+import pandas as pd
+import plotly.express as px
 
 # ─── PAGE CONFIG ───────────────────────────────────────────────
 st.set_page_config(
@@ -107,7 +109,9 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 """, unsafe_allow_html=True)
 
 # ─── CONSTANTS ─────────────────────────────────────────────────
-groq_client = Groq(api_key=st.secrets["OPENAI_API_KEY"])
+groq_client = Groq(
+    api_key=st.secrets["GROQ_API_KEY"]
+)
 CLASSES   = ['covid', 'normal', 'pneumonia']
 ICONS     = {'covid': '🦠', 'normal': '✅', 'pneumonia': '⚠️'}
 MODEL_URL = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final_fixed%20(1).keras"
@@ -145,36 +149,97 @@ def preprocess(image):
 
 def get_key_findings(label, preds):
     c, n, p = preds[0]*100, preds[1]*100, preds[2]*100
-    return {
-        'covid':     [f"<strong>Ground-glass opacity pattern</strong> detected — COVID-19 confidence: {c:.1f}%",
-                      f"<strong>Bilateral lung involvement</strong> pattern identified in scan",
-                      f"<strong>Low Normal probability</strong> ({n:.1f}%) confirms abnormal findings",
-                      f"<strong>Peripheral distribution</strong> of opacities consistent with COVID-19"],
-        'normal':    [f"<strong>Clear lung fields</strong> — No significant opacities detected",
-                      f"<strong>Normal confidence: {n:.1f}%</strong> — Strong healthy lung signal",
-                      f"<strong>No consolidation</strong> or ground-glass patterns found",
-                      f"<strong>COVID probability: {c:.1f}%</strong> — Within safe range"],
-        'pneumonia': [f"<strong>Consolidation pattern</strong> detected — Pneumonia confidence: {p:.1f}%",
-                      f"<strong>Lobar opacity</strong> pattern consistent with bacterial/viral pneumonia",
-                      f"<strong>Air bronchograms</strong> pattern identified in affected lung region",
-                      f"<strong>Normal probability: {n:.1f}%</strong> confirms active infection"],
-    }[label]
+
+    findings = {
+        "covid": [
+            f"Classification most consistent with COVID-19 ({c:.1f}%)",
+            f"Model confidence exceeds Normal class probability ({n:.1f}%)",
+            "Image contains patterns associated with COVID-related abnormalities",
+            "Clinical review is recommended for confirmation"
+        ],
+        "normal": [
+            f"Classification most consistent with a Normal chest X-ray ({n:.1f}%)",
+            "No major abnormal classification patterns detected",
+            "COVID and Pneumonia probabilities remain comparatively low",
+            "Clinical interpretation should still be performed by a professional"
+        ],
+        "pneumonia": [
+            f"Classification most consistent with Pneumonia ({p:.1f}%)",
+            f"Model confidence exceeds Normal class probability ({n:.1f}%)",
+            "Image contains patterns associated with pneumonia-related abnormalities",
+            "Clinical review is recommended for confirmation"
+        ]
+    }
+
+    return findings[label]
 
 def explain_result(label, confidence, language, patient_name, patient_age):
-    patient_info = f"Patient: {patient_name}, Age: {patient_age}." if patient_name else ""
-    res = groq_client.chat.completions.create(
+    patient_info = (
+        f"Patient: {patient_name}, Age: {patient_age}"
+        if patient_name else ""
+    )
+
+    response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role":"user","content":f"""
+        messages=[
+            {
+                "role": "user",
+                "content": f"""
 {patient_info}
-Chest X-ray AI predicted: {label.upper()} with {confidence} confidence.
+
+Chest X-ray AI classification result:
+Class: {label}
+Confidence: {confidence}
+
 Explain in {language}:
-1. What this result means
-2. What the patient may be experiencing
-3. Recommended next steps
-4. Note: AI only, not final diagnosis
-Be empathetic, clear, no prescriptions.
-"""}])
-    return res.choices[0].message.content
+
+1. What this classification means
+2. General information about this condition
+3. Questions the patient may discuss with a healthcare professional
+4. State clearly this is NOT a diagnosis
+5. Do NOT prescribe treatments or medications
+6. Use compassionate and easy-to-understand language
+"""
+            }
+        ]
+    )
+
+    return response.choices[0].message.content
+
+def explain_prediction_reason(label):
+    response = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "user",
+                "content": f"""
+Explain why an image classifier may predict {label}.
+
+Discuss general visual patterns associated with the class.
+
+Do not claim specific findings in this image.
+
+Keep explanation concise and educational.
+"""
+            }
+        ]
+    )
+
+    return response.choices[0].message.content
+
+def risk_level(label, confidence):
+    conf = float(confidence.replace("%", ""))
+
+    if label == "normal":
+        return "🟢 Low Risk"
+
+    if conf >= 90:
+        return "🔴 High Risk"
+
+    if conf >= 70:
+        return "🟠 Moderate Risk"
+
+    return "🟡 Review Recommended"
 
 def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, explanation, findings):
     try:
@@ -193,41 +258,41 @@ def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, 
 
         story.append(Paragraph("Chest X-Ray AI Diagnosis Report", ParagraphStyle('T', parent=styles['Title'], fontSize=20, textColor=colors.HexColor('#1565c0'), spaceAfter=4)))
         story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#1565c0')))
-        story.append(Spacer(1,10))
+        story.append(Spacer(1, 10))
         story.append(Paragraph(f"Generated: {datetime.datetime.now().strftime('%B %d, %Y at %I:%M %p')}", ParagraphStyle('d', parent=styles['Normal'], fontSize=9, textColor=colors.grey)))
-        story.append(Spacer(1,14))
+        story.append(Spacer(1, 14))
 
         if patient_name:
             story.append(Paragraph("Patient Information", h('')))
-            pt = Table([['Name:', patient_name, 'Age:', patient_age],['Gender:', patient_gender, 'Date:', datetime.datetime.now().strftime('%Y-%m-%d')]], colWidths=[1.2*inch,2.3*inch,1*inch,2*inch])
+            pt = Table([['Name:', patient_name, 'Age:', patient_age], ['Gender:', patient_gender, 'Date:', datetime.datetime.now().strftime('%Y-%m-%d')]], colWidths=[1.2*inch, 2.3*inch, 1*inch, 2*inch])
             pt.setStyle(TableStyle([('FONTSIZE',(0,0),(-1,-1),10),('TEXTCOLOR',(0,0),(0,-1),colors.grey),('TEXTCOLOR',(2,0),(2,-1),colors.grey),('BOTTOMPADDING',(0,0),(-1,-1),6)]))
             story.append(pt)
-            story.append(Spacer(1,14))
+            story.append(Spacer(1, 14))
 
         rcolors = {'covid':'#e53935','normal':'#43a047','pneumonia':'#fb8c00'}
         story.append(Paragraph("Diagnosis Result", h('')))
         rt = Table([['Predicted Class','Confidence','Model Used'],[label.upper(),conf,'ResNet50']], colWidths=[2*inch,2*inch,2.5*inch])
         rt.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1565c0')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('BACKGROUND',(0,1),(0,1),colors.HexColor(rcolors[label])),('TEXTCOLOR',(0,1),(0,1),colors.white),('FONTSIZE',(0,0),(-1,-1),11),('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('ALIGN',(0,0),(-1,-1),'CENTER'),('GRID',(0,0),(-1,-1),0.5,colors.lightgrey),('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8)]))
         story.append(rt)
-        story.append(Spacer(1,14))
+        story.append(Spacer(1, 14))
 
         story.append(Paragraph("Class Probabilities", h('')))
         prob_t = Table([['Class','Probability'],['COVID-19',f'{preds[0]*100:.2f}%'],['Normal',f'{preds[1]*100:.2f}%'],['Pneumonia',f'{preds[2]*100:.2f}%']], colWidths=[3*inch,3*inch])
         prob_t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#1565c0')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('ALIGN',(0,0),(-1,-1),'CENTER'),('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.HexColor('#f5f5f5'),colors.white]),('GRID',(0,0),(-1,-1),0.5,colors.lightgrey),('FONTSIZE',(0,0),(-1,-1),11),('TOPPADDING',(0,0),(-1,-1),7),('BOTTOMPADDING',(0,0),(-1,-1),7)]))
         story.append(prob_t)
-        story.append(Spacer(1,14))
+        story.append(Spacer(1, 14))
 
         story.append(Paragraph("Key Radiological Findings", h('')))
         for f in findings:
             clean = f.replace('<strong>','').replace('</strong>','')
             story.append(Paragraph(f"• {clean}", ParagraphStyle('f', parent=styles['Normal'], fontSize=10, spaceAfter=5, leftIndent=10)))
-        story.append(Spacer(1,14))
+        story.append(Spacer(1, 14))
 
         story.append(Paragraph("AI Medical Explanation", h('')))
         story.append(Paragraph(explanation.replace('\n','<br/>'), ParagraphStyle('e', parent=styles['Normal'], fontSize=10, leading=16, textColor=colors.HexColor('#333333'))))
-        story.append(Spacer(1,20))
+        story.append(Spacer(1, 20))
         story.append(HRFlowable(width="100%", thickness=1, color=colors.lightgrey))
-        story.append(Spacer(1,8))
+        story.append(Spacer(1, 8))
         story.append(Paragraph("DISCLAIMER: This report is generated by an AI system for research and educational purposes only. Not a substitute for professional medical diagnosis.", ParagraphStyle('disc', parent=styles['Normal'], fontSize=8, textColor=colors.grey, alignment=1)))
 
         doc.build(story)
@@ -275,7 +340,7 @@ tab1, tab2 = st.tabs(["🔬 Diagnosis", "📊 Model Comparison"])
 
 # ════ TAB 1 ════
 with tab1:
-    left, right = st.columns([1,1], gap="large")
+    left, right = st.columns([1, 1], gap="large")
 
     with left:
         st.markdown('<div class="card"><h3>📤 Upload X-Ray Image</h3>', unsafe_allow_html=True)
@@ -287,7 +352,7 @@ with tab1:
             image    = Image.open(uploaded)
             enhanced = ImageEnhance.Contrast(image).enhance(1.8)
             c1, c2   = st.columns(2)
-            with c1: st.image(image,    caption="Original", use_column_width=True)
+            with c1: st.image(image,    caption="Original",  use_column_width=True)
             with c2: st.image(enhanced, caption="Enhanced", use_column_width=True)
             st.button("🔍 Analyze X-Ray", key="analyze_btn")
 
@@ -305,16 +370,36 @@ with tab1:
 
                     st.session_state.total += 1
                     st.session_state.class_counts[label] += 1
-                    st.session_state.history.append({'label':label,'conf':conf,'time':datetime.datetime.now().strftime('%H:%M')})
+                    st.session_state.history.append({'label': label, 'conf': conf, 'time': datetime.datetime.now().strftime('%H:%M')})
 
                     st.markdown(f'<div class="result-{label}">{ICONS[label]} &nbsp; {label.upper()} &nbsp;·&nbsp; {conf}</div>', unsafe_allow_html=True)
+                    st.info(risk_level(label, conf))
+                    st.markdown("### 🎯 Model Confidence")
+                    st.progress(float(preds[idx]))
+                    st.metric("Confidence Score", conf)
                     st.markdown("<br>", unsafe_allow_html=True)
 
                     st.markdown('<div class="card"><h3>📊 Class Probabilities</h3>', unsafe_allow_html=True)
                     for i, cls in enumerate(CLASSES):
-                        pct = preds[i]*100
+                        pct = preds[i] * 100
                         st.markdown(f'<div class="prob-row"><div class="prob-label">{cls}</div><div class="prob-bar-bg"><div class="prob-bar-fill-{cls}" style="width:{pct:.1f}%"></div></div><div class="prob-pct">{pct:.1f}%</div></div>', unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
+
+                    # ── Pie chart ──────────────────────────────────────────
+                    df = pd.DataFrame({"Class": CLASSES, "Probability": preds * 100})
+                    fig = px.pie(
+                        df,
+                        values="Probability",
+                        names="Class",
+                        hole=0.55,
+                        color="Class",
+                        color_discrete_map={
+                            "covid":     "#e53935",
+                            "normal":    "#43a047",
+                            "pneumonia": "#fb8c00"
+                        }
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
                     findings = get_key_findings(label, preds)
                     st.markdown('<div class="card"><h3>🔍 Key Radiological Findings</h3>', unsafe_allow_html=True)
@@ -328,13 +413,22 @@ with tab1:
                 except Exception as e:
                     st.error(f"Analysis error: {e}")
                     label_ok = "Unknown"
-                    preds_ok = [0,0,0]
+                    preds_ok = [0, 0, 0]
                     findings = []
 
             if label_ok != "Unknown":
                 with st.spinner("💬 Generating explanation..."):
                     try:
                         explanation = explain_result(label_ok, conf, language, patient_name, patient_age)
+                        reasoning   = explain_prediction_reason(label_ok)
+
+                        st.markdown("""
+                        <div class="card">
+                        <h3>🧠 Why Did The AI Predict This?</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        st.write(reasoning)
+
                         st.markdown(f'<div class="card"><h3>🤖 AI Medical Explanation ({language})</h3><div class="explanation-box">{explanation.replace(chr(10),"<br>")}</div></div>', unsafe_allow_html=True)
                     except Exception as e:
                         st.error(f"Explanation error: {e}")
@@ -369,7 +463,7 @@ with tab2:
     cols = st.columns(4)
     for col, (name, stats) in zip(cols, MODEL_STATS.items()):
         with col:
-            border = "border: 1px solid #1565c0;" if name=='ResNet50' else ""
+            border = "border: 1px solid #1565c0;" if name == 'ResNet50' else ""
             st.markdown(f'''
             <div style="background:rgba(13,27,42,0.8);border-radius:12px;padding:16px;text-align:center;{border}">
                 <div style="font-weight:700;color:#e8eaf6;margin-bottom:12px;font-size:0.85rem;">{name}{"  ★" if name=="ResNet50" else ""}</div>
