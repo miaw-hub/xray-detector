@@ -5,7 +5,7 @@ import tensorflow as tf
 import requests
 from io import BytesIO
 import matplotlib.pyplot as plt
-import pandas as pd
+from openai import OpenAI
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -14,18 +14,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- UI THEME ----------------
+# ---------------- THEME ----------------
 st.markdown("""
 <style>
-
-.main {
-    background-color: #0b1220;
-    color: white;
-}
-
-h1, h2, h3 {
-    color: #38bdf8;
-}
+.main { background-color: #0b1220; color: white; }
+h1, h2, h3 { color: #38bdf8; }
 
 .stButton > button {
     background-color: #2563eb;
@@ -41,9 +34,11 @@ h1, h2, h3 {
 [data-testid="stSidebar"] {
     background-color: #0f172a;
 }
-
 </style>
 """, unsafe_allow_html=True)
+
+# ---------------- OPENAI CLIENT ----------------
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # ---------------- MODEL ----------------
 MODEL_URL = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final_fixed%20(1).keras"
@@ -75,79 +70,78 @@ def preprocess(image):
 
     return img
 
+# ---------------- OPENAI EXPLANATION ----------------
+def get_ai_explanation(label, confidence):
+    prompt = f"""
+You are a medical AI assistant.
+
+A chest X-ray model predicted:
+- Diagnosis: {label}
+- Confidence: {confidence:.2f}%
+
+Give:
+1. Simple explanation
+2. Medical interpretation (non-diagnostic)
+3. Possible next steps for patient
+4. No prescriptions, keep safe language
+"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a careful medical explanation assistant."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    return response.choices[0].message.content
+
 # ---------------- SIDEBAR ----------------
-st.sidebar.title("🫁 AI X-Ray System")
+st.sidebar.title("🫁 Chest X-Ray AI")
+page = st.sidebar.radio("Navigation", ["🏠 Home", "🤖 AI Doctor", "ℹ️ Info"])
 
-page = st.sidebar.radio(
-    "Navigation",
-    ["🏠 Dashboard", "🤖 AI Chat", "📊 Model Info"]
-)
+st.sidebar.caption("⚠️ Educational tool only")
 
-st.sidebar.write("---")
-st.sidebar.caption("⚠️ Educational system only — not medical diagnosis")
-
-# ---------------- MODEL INFO ----------------
-if page == "📊 Model Info":
-    st.title("📊 Model Information")
-    st.write("Deep Learning CNN model loaded from Hugging Face.")
+# ---------------- INFO PAGE ----------------
+if page == "ℹ️ Info":
+    st.title("ℹ️ System Info")
+    st.write("Deep learning + OpenAI-powered medical explanation system.")
     st.code(MODEL_URL)
 
-# ---------------- CHATBOT (LEVEL 4 FEATURE) ----------------
-elif page == "🤖 AI Chat":
-    st.title("🤖 AI Medical Assistant (Simulation)")
+# ---------------- AI DOCTOR PAGE ----------------
+elif page == "🤖 AI Doctor":
+    st.title("🤖 AI Medical Assistant")
+    st.write("Ask general questions about chest X-rays")
 
-    st.write("Ask questions about X-ray results:")
+    q = st.text_input("Ask a question")
 
-    user_input = st.text_input("Enter question")
+    if q:
+        with st.spinner("Thinking..."):
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a helpful medical education assistant."},
+                    {"role": "user", "content": q}
+                ]
+            )
 
-    if user_input:
-        st.info("This is a simulated medical explanation layer.")
+        st.success(response.choices[0].message.content)
 
-        st.write("💬 Response:")
-        st.write("""
-        Chest X-rays are interpreted based on lung opacity, structure, and abnormalities.
-
-        If pneumonia is detected, it usually indicates:
-        - Infection in lungs
-        - Fluid or inflammation
-        - Reduced air transparency
-        """)
-
-# ---------------- MAIN DASHBOARD ----------------
+# ---------------- MAIN APP ----------------
 else:
 
     st.title("🫁 Chest X-Ray AI Diagnostic System")
-    st.caption("Advanced AI-powered medical imaging assistant")
+    st.caption("AI-powered medical imaging analysis system")
 
-    col1, col2 = st.columns([1, 1])
+    uploaded_file = st.file_uploader("Upload Chest X-Ray", type=["jpg", "jpeg", "png"])
 
-    # ---------------- UPLOAD ----------------
-    with col1:
-        uploaded_file = st.file_uploader(
-            "Upload Chest X-Ray",
-            type=["jpg", "jpeg", "png"]
-        )
-
-        if uploaded_file:
-            image = Image.open(uploaded_file)
-            st.image(image, use_container_width=True)
-
-    # ---------------- ANALYSIS ----------------
-    with col2:
-        st.subheader("🧠 Analysis Panel")
-
-        if uploaded_file:
-            st.success("Image ready for analysis")
-        else:
-            st.warning("Upload image first")
-
-    # ---------------- PREDICTION ----------------
     if uploaded_file:
+        image = Image.open(uploaded_file)
+        st.image(image, use_container_width=True)
 
-        if st.button("🔍 Run AI Analysis", use_container_width=True):
+        if st.button("🔍 Analyze X-Ray", use_container_width=True):
 
-            with st.spinner("Running deep learning model..."):
-
+            with st.spinner("Analyzing with AI model..."):
                 processed = preprocess(image)
                 prediction = model.predict(processed)
 
@@ -165,78 +159,38 @@ else:
             else:
                 st.error(f"Result: {label}")
 
-            st.metric("Confidence Score", f"{confidence:.2f}%")
+            st.metric("Confidence", f"{confidence:.2f}%")
 
-            # ---------------- CONFIDENCE TABLE (LEVEL 4 UPGRADE) ----------------
-            st.subheader("📊 Confidence Analysis")
-
-            df = pd.DataFrame({
-                "Class": CLASS_NAMES,
-                "Probability": prediction[0]
-            })
-
-            st.dataframe(df, use_container_width=True)
+            # ---------------- CHART ----------------
+            st.subheader("📊 Confidence Breakdown")
 
             fig, ax = plt.subplots()
             ax.bar(CLASS_NAMES, prediction[0])
             ax.set_ylim([0, 1])
             st.pyplot(fig)
 
-            # ---------------- AI EXPLANATION ----------------
-            st.subheader("🤖 AI Explanation Engine")
+            # ---------------- OPENAI EXPLANATION ----------------
+            st.subheader("🤖 AI Explanation (OpenAI)")
 
-            if label == "Normal":
-                st.info("""
-                The lung image appears normal with no strong abnormal opacity patterns detected.
-                """)
-            else:
-                st.warning("""
-                The model detected patterns consistent with pneumonia-like infection.
+            with st.spinner("Generating medical explanation..."):
+                explanation = get_ai_explanation(label, confidence)
 
-                Possible indicators:
-                - Lung opacity increase
-                - Inflammation patterns
-                - Reduced air transparency
-                """)
+            st.info(explanation)
 
-            # ---------------- RECOMMENDATIONS ----------------
-            st.subheader("🧾 Clinical Recommendations")
+            # ---------------- REPORT ----------------
+            st.subheader("📄 Download Report")
 
-            if label == "Normal":
-                st.success("""
-                - No abnormal findings detected
-                - Maintain healthy lifestyle
-                - Consult doctor if symptoms exist
-                """)
-            else:
-                st.error("""
-                - Seek medical consultation
-                - Further imaging may be required
-                - Monitor symptoms (fever, breathing difficulty)
-                """)
-
-            # ---------------- GRAD-CAM PLACEHOLDER (LEVEL 4 CORE FEATURE) ----------------
-            st.subheader("🔥 Explainable AI (Grad-CAM)")
-
-            st.info("""
-            Next upgrade: Heatmap visualization showing which lung regions influenced the prediction.
-            (Model interpretability layer)
-            """)
-
-            # ---------------- DOWNLOAD REPORT ----------------
-            st.subheader("📄 Generate Report")
-
-            report_text = f"""
+            report = f"""
 Chest X-Ray AI Report
 
 Diagnosis: {label}
 Confidence: {confidence:.2f}%
 
-Disclaimer: Educational tool only, not medical diagnosis.
+Disclaimer: Educational use only, not medical diagnosis.
 """
 
             st.download_button(
-                label="Download Report",
-                data=report_text,
+                "Download Report",
+                report,
                 file_name="xray_report.txt"
             )
