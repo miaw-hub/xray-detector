@@ -15,8 +15,9 @@ import plotly.express as px
 # PAGE CONFIG
 st.set_page_config(
     page_title="Chest X-Ray Diagnostic Classifier",
-    page_icon=":lungs:",
-    layout="wide"
+    page_icon="🫁",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 st.markdown("""
@@ -115,7 +116,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     box-shadow: 0 6px 20px rgba(25,118,210,0.5) !important;
 }
 .upload-hint { text-align:center; color:#546e7a; font-size:0.82rem; margin-top:6px; }
-#MainMenu, footer, header { visibility: hidden; }
+#MainMenu, footer { visibility: hidden; }
 .block-container { padding-top: 1.5rem; padding-bottom: 1.5rem; }
 </style>
 """, unsafe_allow_html=True)
