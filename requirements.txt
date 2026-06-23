@@ -3,5 +3,4 @@ pillow
 openai
 requests
 numpy
-huggingface_hub
-tf-keras
+tensorflow-cpu
