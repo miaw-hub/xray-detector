@@ -3,5 +3,4 @@ pillow
 numpy
 matplotlib
 requests
-tensorflow
 openai
