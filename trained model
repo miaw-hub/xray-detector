@@ -1,0 +1,7 @@
+## Model
+
+The trained model is hosted on Hugging Face:
+
+https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final_fixed%20(1).keras
+
+The application downloads and uses the model for inference.
