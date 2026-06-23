@@ -4,3 +4,4 @@ groq
 requests
 numpy
 tensorflow-cpu
+reportlab
