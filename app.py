@@ -13,7 +13,7 @@ import plotly.express as px
 
 # ─── PAGE CONFIG ───────────────────────────────────────────────
 st.set_page_config(
-    page_title="Chest X-Ray AI Diagnosis",
+    page_title="Chest X-Ray Diagnostic Classifier",
     page_icon="🫁",
     layout="wide"
 )
@@ -34,6 +34,12 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .hero h1 { font-size: 2.6rem; font-weight: 700; color: #fff; margin: 0 0 10px 0; }
 .hero p  { font-size: 1rem; color: #90caf9; margin: 0; font-weight: 300; }
 
+st.markdown("""
+<div class="hero">
+    <h1>🫁 Chest X-Ray Diagnostic Classifier</h1>
+    <p>Deep learning powered classification · COVID-19 · Pneumonia · Normal</p>
+</div>
+""", unsafe_allow_html=True)
 .card {
     background: linear-gradient(145deg, #0d1b2a, #112240);
     border: 1px solid rgba(100,181,246,0.15); border-radius: 16px;
