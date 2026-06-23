@@ -1,6 +1,6 @@
 streamlit
 pillow
-openai
+groq
 requests
 numpy
 tensorflow-cpu
