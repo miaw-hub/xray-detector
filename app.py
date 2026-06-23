@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -11,14 +12,14 @@ import datetime
 import pandas as pd
 import plotly.express as px
 
-# ─── PAGE CONFIG ───────────────────────────────────────────────
+# PAGE CONFIG
 st.set_page_config(
     page_title="Chest X-Ray Diagnostic Classifier",
-    page_icon="🫁",
+    page_icon=":lungs:",
     layout="wide"
 )
 
-# ─── CSS ───────────────────────────────────────────────────────
+# CSS
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -34,12 +35,6 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .hero h1 { font-size: 2.6rem; font-weight: 700; color: #fff; margin: 0 0 10px 0; }
 .hero p  { font-size: 1rem; color: #90caf9; margin: 0; font-weight: 300; }
 
-st.markdown("""
-<div class="hero">
-    <h1> Chest X-Ray Diagnostic Classifier</h1>
-    <p>Deep learning powered classification · COVID-19 · Pneumonia · Normal</p>
-</div>
-""", unsafe_allow_html=True)
 .card {
     background: linear-gradient(145deg, #0d1b2a, #112240);
     border: 1px solid rgba(100,181,246,0.15); border-radius: 16px;
@@ -114,12 +109,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ─── CONSTANTS ─────────────────────────────────────────────────
-groq_client = Groq(
-    api_key=st.secrets["GROQ_API_KEY"]
-)
+# CONSTANTS
+groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 CLASSES   = ['covid', 'normal', 'pneumonia']
-ICONS     = {'covid': '🦠', 'normal': '✅', 'pneumonia': '⚠️'}
+ICONS     = {'covid': '[virus]', 'normal': '[ok]', 'pneumonia': '[warn]'}
 MODEL_URL = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final_fixed%20(1).keras"
 IMG_SIZE  = 128
 
@@ -134,7 +127,7 @@ if 'history'      not in st.session_state: st.session_state.history = []
 if 'total'        not in st.session_state: st.session_state.total = 0
 if 'class_counts' not in st.session_state: st.session_state.class_counts = {'covid':0,'normal':0,'pneumonia':0}
 
-# ─── HELPERS ───────────────────────────────────────────────────
+# HELPERS
 @st.cache_resource(show_spinner=False)
 def load_model():
     import tensorflow as tf
@@ -155,7 +148,6 @@ def preprocess(image):
 
 def get_key_findings(label, preds):
     c, n, p = preds[0]*100, preds[1]*100, preds[2]*100
-
     findings = {
         "covid": [
             f"Classification most consistent with COVID-19 ({c:.1f}%)",
@@ -176,21 +168,15 @@ def get_key_findings(label, preds):
             "Clinical review is recommended for confirmation"
         ]
     }
-
     return findings[label]
 
 def explain_result(label, confidence, language, patient_name, patient_age):
-    patient_info = (
-        f"Patient: {patient_name}, Age: {patient_age}"
-        if patient_name else ""
-    )
-
+    patient_info = (f"Patient: {patient_name}, Age: {patient_age}" if patient_name else "")
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[
-            {
-                "role": "user",
-                "content": f"""
+        messages=[{
+            "role": "user",
+            "content": f"""
 {patient_info}
 
 Chest X-ray AI classification result:
@@ -206,46 +192,34 @@ Explain in {language}:
 5. Do NOT prescribe treatments or medications
 6. Use compassionate and easy-to-understand language
 """
-            }
-        ]
+        }]
     )
-
     return response.choices[0].message.content
 
 def explain_prediction_reason(label):
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[
-            {
-                "role": "user",
-                "content": f"""
+        messages=[{
+            "role": "user",
+            "content": f"""
 Explain why an image classifier may predict {label}.
-
 Discuss general visual patterns associated with the class.
-
 Do not claim specific findings in this image.
-
 Keep explanation concise and educational.
 """
-            }
-        ]
+        }]
     )
-
     return response.choices[0].message.content
 
 def risk_level(label, confidence):
     conf = float(confidence.replace("%", ""))
-
     if label == "normal":
-        return "🟢 Low Risk"
-
+        return "Low Risk"
     if conf >= 90:
-        return "🔴 High Risk"
-
+        return "High Risk"
     if conf >= 70:
-        return "🟠 Moderate Risk"
-
-    return "🟡 Review Recommended"
+        return "Moderate Risk"
+    return "Review Recommended"
 
 def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, explanation, findings):
     try:
@@ -262,7 +236,7 @@ def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, 
 
         h = lambda t: ParagraphStyle('h', parent=styles['Normal'], fontSize=13, textColor=colors.HexColor('#1565c0'), spaceAfter=6, fontName='Helvetica-Bold')
 
-        story.append(Paragraph("Chest X-Ray AI Diagnosis Report", ParagraphStyle('T', parent=styles['Title'], fontSize=20, textColor=colors.HexColor('#1565c0'), spaceAfter=4)))
+        story.append(Paragraph("Chest X-Ray Diagnostic Classifier Report", ParagraphStyle('T', parent=styles['Title'], fontSize=20, textColor=colors.HexColor('#1565c0'), spaceAfter=4)))
         story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#1565c0')))
         story.append(Spacer(1, 10))
         story.append(Paragraph(f"Generated: {datetime.datetime.now().strftime('%B %d, %Y at %I:%M %p')}", ParagraphStyle('d', parent=styles['Normal'], fontSize=9, textColor=colors.grey)))
@@ -291,7 +265,7 @@ def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, 
         story.append(Paragraph("Key Radiological Findings", h('')))
         for f in findings:
             clean = f.replace('<strong>','').replace('</strong>','')
-            story.append(Paragraph(f"• {clean}", ParagraphStyle('f', parent=styles['Normal'], fontSize=10, spaceAfter=5, leftIndent=10)))
+            story.append(Paragraph(f"- {clean}", ParagraphStyle('f', parent=styles['Normal'], fontSize=10, spaceAfter=5, leftIndent=10)))
         story.append(Spacer(1, 14))
 
         story.append(Paragraph("AI Medical Explanation", h('')))
@@ -307,19 +281,19 @@ def generate_pdf(patient_name, patient_age, patient_gender, label, conf, preds, 
     except Exception as e:
         return None
 
-# ─── SIDEBAR ───────────────────────────────────────────────────
+# SIDEBAR
 with st.sidebar:
-    st.markdown("### ⚙️ Settings")
+    st.markdown("### Settings")
     st.markdown("---")
-    st.markdown("#### 👤 Patient Information")
+    st.markdown("#### Patient Information")
     patient_name   = st.text_input("Patient Name", placeholder="e.g. Sarah Ahmed")
     patient_age    = st.text_input("Age", placeholder="e.g. 35")
     patient_gender = st.selectbox("Gender", ["Select","Female","Male","Other"])
     st.markdown("---")
-    st.markdown("#### 🌍 Explanation Language")
+    st.markdown("#### Explanation Language")
     language = st.selectbox("", ["English","Urdu","Arabic","French","Spanish"], label_visibility="collapsed")
     st.markdown("---")
-    st.markdown("#### 📊 Session Statistics")
+    st.markdown("#### Session Statistics")
     s1, s2 = st.columns(2)
     with s1: st.markdown(f'<div class="stat-box"><div class="stat-val">{st.session_state.total}</div><div class="stat-lbl">Analyzed</div></div>', unsafe_allow_html=True)
     with s2: st.markdown(f'<div class="stat-box"><div class="stat-val">{st.session_state.class_counts["covid"]}</div><div class="stat-lbl">COVID</div></div>', unsafe_allow_html=True)
@@ -329,29 +303,29 @@ with st.sidebar:
     with s4: st.markdown(f'<div class="stat-box"><div class="stat-val">{st.session_state.class_counts["pneumonia"]}</div><div class="stat-lbl">Pneumonia</div></div>', unsafe_allow_html=True)
     if st.session_state.history:
         st.markdown("---")
-        st.markdown("#### 🕓 Recent History")
+        st.markdown("#### Recent History")
         for h in reversed(st.session_state.history[-5:]):
-            st.markdown(f"`{h['time']}` {ICONS[h['label']]} **{h['label'].upper()}** — {h['conf']}")
+            st.markdown(f"`{h['time']}` **{h['label'].upper()}** -- {h['conf']}")
 
-# ─── HERO ──────────────────────────────────────────────────────
+# HERO
 st.markdown("""
 <div class="hero">
-    <h1>🫁 Chest X-Ray AI Diagnosis</h1>
-    <p>Deep learning powered classification · COVID-19 · Pneumonia · Normal</p>
+    <h1>Chest X-Ray Diagnostic Classifier</h1>
+    <p>Deep learning powered classification - COVID-19 - Pneumonia - Normal</p>
 </div>
 """, unsafe_allow_html=True)
 
-# ─── TABS ──────────────────────────────────────────────────────
-tab1, tab2 = st.tabs(["🔬 Diagnosis", "📊 Model Comparison"])
+# TABS
+tab1, tab2 = st.tabs(["Diagnosis", "Model Comparison"])
 
-# ════ TAB 1 ════
+# TAB 1
 with tab1:
     left, right = st.columns([1, 1], gap="large")
 
     with left:
-        st.markdown('<div class="card"><h3>📤 Upload X-Ray Image</h3>', unsafe_allow_html=True)
+        st.markdown('<div class="card"><h3>Upload X-Ray Image</h3>', unsafe_allow_html=True)
         uploaded = st.file_uploader("", type=["jpg","jpeg","png"], label_visibility="collapsed")
-        st.markdown('<p class="upload-hint">Supported: JPG · JPEG · PNG</p>', unsafe_allow_html=True)
+        st.markdown('<p class="upload-hint">Supported: JPG - JPEG - PNG</p>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         if uploaded:
@@ -360,13 +334,13 @@ with tab1:
             c1, c2   = st.columns(2)
             with c1: st.image(image,    caption="Original",  use_column_width=True)
             with c2: st.image(enhanced, caption="Enhanced", use_column_width=True)
-            st.button("🔍 Analyze X-Ray", key="analyze_btn")
+            st.button("Analyze X-Ray", key="analyze_btn")
 
     with right:
         if uploaded and st.session_state.get("analyze_btn"):
-            with st.spinner("⏳ Loading AI model..."):
+            with st.spinner("Loading AI model..."):
                 model = load_model()
-            with st.spinner("🔬 Analyzing X-ray..."):
+            with st.spinner("Analyzing X-ray..."):
                 try:
                     arr   = preprocess(image)
                     preds = model.predict(arr, verbose=0)[0]
@@ -378,20 +352,19 @@ with tab1:
                     st.session_state.class_counts[label] += 1
                     st.session_state.history.append({'label': label, 'conf': conf, 'time': datetime.datetime.now().strftime('%H:%M')})
 
-                    st.markdown(f'<div class="result-{label}">{ICONS[label]} &nbsp; {label.upper()} &nbsp;·&nbsp; {conf}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="result-{label}">{label.upper()} - {conf}</div>', unsafe_allow_html=True)
                     st.info(risk_level(label, conf))
-                    st.markdown("### 🎯 Model Confidence")
+                    st.markdown("### Model Confidence")
                     st.progress(float(preds[idx]))
                     st.metric("Confidence Score", conf)
                     st.markdown("<br>", unsafe_allow_html=True)
 
-                    st.markdown('<div class="card"><h3>📊 Class Probabilities</h3>', unsafe_allow_html=True)
+                    st.markdown('<div class="card"><h3>Class Probabilities</h3>', unsafe_allow_html=True)
                     for i, cls in enumerate(CLASSES):
                         pct = preds[i] * 100
                         st.markdown(f'<div class="prob-row"><div class="prob-label">{cls}</div><div class="prob-bar-bg"><div class="prob-bar-fill-{cls}" style="width:{pct:.1f}%"></div></div><div class="prob-pct">{pct:.1f}%</div></div>', unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
 
-                    # ── Pie chart ──────────────────────────────────────────
                     df = pd.DataFrame({"Class": CLASSES, "Probability": preds * 100})
                     fig = px.pie(
                         df,
@@ -408,7 +381,7 @@ with tab1:
                     st.plotly_chart(fig, use_container_width=True)
 
                     findings = get_key_findings(label, preds)
-                    st.markdown('<div class="card"><h3>🔍 Key Radiological Findings</h3>', unsafe_allow_html=True)
+                    st.markdown('<div class="card"><h3>Key Radiological Findings</h3>', unsafe_allow_html=True)
                     for f in findings:
                         st.markdown(f'<div class="key-finding">{f}</div>', unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
@@ -423,56 +396,52 @@ with tab1:
                     findings = []
 
             if label_ok != "Unknown":
-                with st.spinner("💬 Generating explanation..."):
+                with st.spinner("Generating explanation..."):
                     try:
                         explanation = explain_result(label_ok, conf, language, patient_name, patient_age)
                         reasoning   = explain_prediction_reason(label_ok)
 
-                        st.markdown("""
-                        <div class="card">
-                        <h3>🧠 Why Did The AI Predict This?</h3>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        st.markdown('<div class="card"><h3>Why Did The AI Predict This?</h3></div>', unsafe_allow_html=True)
                         st.write(reasoning)
 
-                        st.markdown(f'<div class="card"><h3>🤖 AI Medical Explanation ({language})</h3><div class="explanation-box">{explanation.replace(chr(10),"<br>")}</div></div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="card"><h3>AI Medical Explanation ({language})</h3><div class="explanation-box">{explanation.replace(chr(10),"<br>")}</div></div>', unsafe_allow_html=True)
                     except Exception as e:
                         st.error(f"Explanation error: {e}")
                         explanation = "Explanation unavailable."
 
                 st.markdown("<br>", unsafe_allow_html=True)
-                with st.spinner("📄 Preparing PDF..."):
+                with st.spinner("Preparing PDF..."):
                     try:
                         import reportlab
                         pdf = generate_pdf(patient_name, patient_age, patient_gender, label_ok, conf, preds_ok, explanation, findings)
                         if pdf:
                             fname = f"xray_report_{patient_name.replace(' ','_') if patient_name else 'patient'}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-                            st.download_button("📥 Download Full PDF Report", data=pdf, file_name=fname, mime="application/pdf", use_container_width=True)
+                            st.download_button("Download Full PDF Report", data=pdf, file_name=fname, mime="application/pdf", use_container_width=True)
                     except ImportError:
-                        st.warning("Add `reportlab` to requirements.txt to enable PDF download.")
+                        st.warning("Add reportlab to requirements.txt to enable PDF download.")
 
         elif not uploaded:
-            st.markdown('<div class="placeholder-box"><div style="font-size:4rem;margin-bottom:16px;">🫁</div><div style="color:#546e7a;font-size:0.95rem;line-height:1.8;">Upload a chest X-ray on the left<br>then click <strong style="color:#64b5f6">Analyze X-Ray</strong><br>to get AI-powered diagnosis</div></div>', unsafe_allow_html=True)
+            st.markdown('<div class="placeholder-box"><div style="font-size:4rem;margin-bottom:16px;">X</div><div style="color:#546e7a;font-size:0.95rem;line-height:1.8;">Upload a chest X-ray on the left<br>then click <strong style="color:#64b5f6">Analyze X-Ray</strong><br>to get AI-powered diagnosis</div></div>', unsafe_allow_html=True)
 
-# ════ TAB 2 ════
+# TAB 2
 with tab2:
-    st.markdown('<div class="card"><h3>🏆 Model Performance Comparison</h3>All four models trained on the same dataset — 6939 balanced chest X-ray images.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card"><h3>Model Performance Comparison</h3>All four models trained on the same dataset - 6939 balanced chest X-ray images.</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="card"><h3>📊 Overall Accuracy</h3>', unsafe_allow_html=True)
+    st.markdown('<div class="card"><h3>Overall Accuracy</h3>', unsafe_allow_html=True)
     for name, stats in MODEL_STATS.items():
         is_best = name == 'ResNet50'
-        badge   = '<span class="model-badge-best">★ BEST</span>' if is_best else ''
+        badge   = '<span class="model-badge-best">BEST</span>' if is_best else ''
         st.markdown(f'<div class="model-row"><div><span class="model-name">{name}</span>{badge}</div><div class="prob-bar-bg" style="flex:1;margin:0 16px;"><div class="prob-bar-fill-normal" style="width:{stats["acc"]}%"></div></div><div class="model-acc">{stats["acc"]}%</div></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="card"><h3>🎯 Per-Class Accuracy Breakdown</h3>', unsafe_allow_html=True)
+    st.markdown('<div class="card"><h3>Per-Class Accuracy Breakdown</h3>', unsafe_allow_html=True)
     cols = st.columns(4)
     for col, (name, stats) in zip(cols, MODEL_STATS.items()):
         with col:
             border = "border: 1px solid #1565c0;" if name == 'ResNet50' else ""
             st.markdown(f'''
             <div style="background:rgba(13,27,42,0.8);border-radius:12px;padding:16px;text-align:center;{border}">
-                <div style="font-weight:700;color:#e8eaf6;margin-bottom:12px;font-size:0.85rem;">{name}{"  ★" if name=="ResNet50" else ""}</div>
+                <div style="font-weight:700;color:#e8eaf6;margin-bottom:12px;font-size:0.85rem;">{name}{"  *" if name=="ResNet50" else ""}</div>
                 <div style="margin-bottom:8px;"><div style="font-size:0.7rem;color:#90caf9;">COVID</div><div style="font-size:1.2rem;font-weight:700;color:#e53935;">{stats["covid"]}%</div></div>
                 <div style="margin-bottom:8px;"><div style="font-size:0.7rem;color:#90caf9;">NORMAL</div><div style="font-size:1.2rem;font-weight:700;color:#43a047;">{stats["normal"]}%</div></div>
                 <div><div style="font-size:0.7rem;color:#90caf9;">PNEUMONIA</div><div style="font-size:1.2rem;font-weight:700;color:#fb8c00;">{stats["pneumonia"]}%</div></div>
@@ -481,17 +450,17 @@ with tab2:
 
     st.markdown("""
     <div class="card">
-        <h3>✅ Why ResNet50 Was Selected</h3>
-        <div class="key-finding"><strong>Highest Overall Accuracy</strong> — 83.95% across all three classes</div>
-        <div class="key-finding"><strong>Best COVID Detection</strong> — 94.51% sensitivity, critical for medical screening</div>
-        <div class="key-finding"><strong>Best Normal Detection</strong> — 97.84%, minimizing false positives</div>
-        <div class="key-finding"><strong>Deep Residual Learning</strong> — Skip connections allow learning of subtle radiological patterns</div>
-        <div class="key-finding"><strong>Stable Training</strong> — BatchNorm frozen layers prevented instability during fine-tuning</div>
+        <h3>Why ResNet50 Was Selected</h3>
+        <div class="key-finding"><strong>Highest Overall Accuracy</strong> - 83.95% across all three classes</div>
+        <div class="key-finding"><strong>Best COVID Detection</strong> - 94.51% sensitivity, critical for medical screening</div>
+        <div class="key-finding"><strong>Best Normal Detection</strong> - 97.84%, minimizing false positives</div>
+        <div class="key-finding"><strong>Deep Residual Learning</strong> - Skip connections allow learning of subtle radiological patterns</div>
+        <div class="key-finding"><strong>Stable Training</strong> - BatchNorm frozen layers prevented instability during fine-tuning</div>
     </div>""", unsafe_allow_html=True)
 
-# ─── DISCLAIMER ────────────────────────────────────────────────
+# DISCLAIMER
 st.markdown("""
 <div class="disclaimer">
-    ⚠️ <strong>Medical Disclaimer:</strong> This tool is for research and educational purposes only.
+    <strong>Medical Disclaimer:</strong> This tool is for research and educational purposes only.
     It is not a substitute for professional medical diagnosis. Always consult a qualified healthcare provider.
 </div>""", unsafe_allow_html=True)
