@@ -1,7 +1,7 @@
 streamlit
-keras
-tf-keras
 pillow
 openai
 requests
 numpy
+huggingface_hub
+tf-keras
