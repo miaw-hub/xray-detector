@@ -36,7 +36,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
 st.markdown("""
 <div class="hero">
-    <h1>🫁 Chest X-Ray Diagnostic Classifier</h1>
+    <h1> Chest X-Ray Diagnostic Classifier</h1>
     <p>Deep learning powered classification · COVID-19 · Pneumonia · Normal</p>
 </div>
 """, unsafe_allow_html=True)
